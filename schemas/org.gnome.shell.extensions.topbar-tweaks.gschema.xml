@@ -45,6 +45,16 @@
       <default>false</default>
       <summary>Show the keyboard layout indicator</summary>
     </key>
+    <key name="mirror-indicators" type="b">
+      <default>true</default>
+      <summary>Mirror indicators from other extensions</summary>
+      <description>Show clickable copies of the icons other extensions add to the main top bar (app tray icons, clipboard managers, etc.). Their menus open on the monitor of the bar they were clicked on.</description>
+    </key>
+    <key name="mirror-quick-settings" type="b">
+      <default>true</default>
+      <summary>Mirror Quick Settings toggles from other extensions</summary>
+      <description>Show clickable copies of the toggles other extensions add to the main Quick Settings menu.</description>
+    </key>
     <key name="clock-position" type="s">
       <choices>
         <choice value="left"/>

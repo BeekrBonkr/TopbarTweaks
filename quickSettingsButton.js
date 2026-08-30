@@ -10,12 +10,20 @@
 //    duplicate them)
 //  - the unsafe-mode indicator (not exported, rarely relevant)
 
+import Clutter from 'gi://Clutter';
+import GLib from 'gi://GLib';
 import GObject from 'gi://GObject';
 import St from 'gi://St';
 
 import * as Config from 'resource:///org/gnome/shell/misc/config.js';
+import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
-import {QuickSettingsMenu} from 'resource:///org/gnome/shell/ui/quickSettings.js';
+import {
+    QuickSettingsMenu,
+    QuickSettingsItem,
+    QuickSlider,
+    SystemIndicator,
+} from 'resource:///org/gnome/shell/ui/quickSettings.js';
 
 import * as SystemStatus from 'resource:///org/gnome/shell/ui/status/system.js';
 import * as CameraStatus from 'resource:///org/gnome/shell/ui/status/camera.js';
@@ -34,10 +42,50 @@ import * as BackgroundAppsStatus from 'resource:///org/gnome/shell/ui/status/bac
 
 const N_QUICK_SETTINGS_COLUMNS = 2;
 
+// A clickable stand-in for a toggle another extension added to the MAIN
+// Quick Settings menu. Visuals come from a live Clutter.Clone of the real
+// toggle (so checked state, icon and label stay in sync); clicking emits
+// 'clicked' on the real toggle, triggering the extension's own handler.
+const QSItemMirror = GObject.registerClass(
+class TopbarTweaksQSItemMirror extends St.Button {
+    _init(source) {
+        super._init({
+            style_class: 'topbar-tweaks-qs-mirror',
+            reactive: true,
+            can_focus: true,
+            track_hover: true,
+            x_expand: true,
+            accessible_name: source.accessible_name ?? '',
+        });
+
+        this._source = source;
+        this.set_child(new Clutter.Clone({source}));
+
+        source.bind_property('visible', this, 'visible',
+            GObject.BindingFlags.SYNC_CREATE);
+        source.connectObject('destroy', () => this.destroy(), this);
+
+        // Slight dim as hover/press feedback (the clone paints over any
+        // background this button could draw itself)
+        const feedback = () => {
+            this.child.opacity = this.pressed ? 180 : this.hover ? 215 : 255;
+        };
+        this.connect('notify::hover', feedback);
+        this.connect('notify::pressed', feedback);
+
+        this.connect('clicked', (_a, button) =>
+            this._source.emit('clicked', button));
+    }
+});
+
 export const QuickSettingsButton = GObject.registerClass(
 class TopbarTweaksQuickSettingsButton extends PanelMenu.Button {
-    constructor() {
+    constructor(mirrorExternal) {
         super(0.0, 'System', true);
+
+        this._mirrorExternal = mirrorExternal;
+        this._externalMirrors = [];
+        this._externalSyncId = 0;
 
         this._indicators = new St.BoxLayout({
             style_class: 'panel-status-indicators-box',
@@ -45,6 +93,13 @@ class TopbarTweaksQuickSettingsButton extends PanelMenu.Button {
         this.add_child(this._indicators);
 
         this.setMenu(new QuickSettingsMenu(this, N_QUICK_SETTINGS_COLUMNS));
+
+        this.connect('destroy', () => {
+            if (this._externalSyncId) {
+                GLib.source_remove(this._externalSyncId);
+                this._externalSyncId = 0;
+            }
+        });
 
         this._setupIndicators().catch(error =>
             logError(error, '[Topbar Tweaks] Failed to set up quick settings'));
@@ -132,9 +187,123 @@ class TopbarTweaksQuickSettingsButton extends PanelMenu.Button {
 
         this._backgroundApps.quickSettingsItems.forEach(
             item => this.menu.addItem(item, N_QUICK_SETTINGS_COLUMNS));
+
+        if (this._mirrorExternal)
+            this._watchExternalItems();
     }
 
     _addItemsBefore(items, sibling, colSpan = 1) {
         items.forEach(item => this.menu.insertItemBefore(item, sibling, colSpan));
+    }
+
+    // --- Mirroring of toggles/indicators other extensions add to the MAIN
+    // Quick Settings (caffeine, GSConnect, ...). They register through
+    // Main.panel.statusArea.quickSettings.addExternalIndicator(); anything
+    // in the main QS grid that does not belong to a built-in shell
+    // indicator is considered external.
+
+    _watchExternalItems() {
+        const main = Main.panel.statusArea.quickSettings;
+        if (!main?.menu?._grid)
+            return;
+
+        main.menu._grid.connectObject(
+            'child-added', () => this._queueExternalSync(),
+            'child-removed', () => this._queueExternalSync(),
+            this);
+        main._indicators?.connectObject(
+            'child-added', () => this._queueExternalSync(),
+            'child-removed', () => this._queueExternalSync(),
+            this);
+
+        this._syncExternalItems();
+    }
+
+    _queueExternalSync() {
+        if (this._externalSyncId)
+            return;
+        this._externalSyncId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 50, () => {
+            this._externalSyncId = 0;
+            this._syncExternalItems();
+            return GLib.SOURCE_REMOVE;
+        });
+    }
+
+    _syncExternalItems() {
+        const main = Main.panel.statusArea.quickSettings;
+        if (!main?.menu?._grid)
+            return;
+
+        for (const mirror of this._externalMirrors.slice())
+            mirror.destroy();
+        this._externalMirrors = [];
+
+        // Everything owned by the main QS button's built-in indicators
+        const builtinIndicators = new Set();
+        const builtinItems = new Set();
+        for (const key of Object.keys(main)) {
+            const value = main[key];
+            if (value instanceof SystemIndicator) {
+                builtinIndicators.add(value);
+                for (const item of value.quickSettingsItems ?? [])
+                    builtinItems.add(item);
+            }
+        }
+
+        // Panel icons of external indicators (e.g. caffeine's cup)
+        for (const child of main._indicators?.get_children() ?? []) {
+            if (builtinIndicators.has(child))
+                continue;
+            const clone = new Clutter.Clone({
+                source: child,
+                y_align: Clutter.ActorAlign.CENTER,
+            });
+            child.bind_property('visible', clone, 'visible',
+                GObject.BindingFlags.SYNC_CREATE);
+            child.connectObject('destroy', () => clone.destroy(), clone);
+            this._indicators.insert_child_below(clone,
+                this._brightness ?? null);
+            this._trackMirror(clone);
+        }
+
+        // Toggles in the grid. Sliders and other custom widgets need real
+        // pointer interaction that a clone cannot forward, so only
+        // button-like items are mirrored.
+        const grid = main.menu._grid;
+        const sibling = this._backgroundApps?.quickSettingsItems?.at(-1) ?? null;
+        for (const item of grid.get_children()) {
+            if (builtinItems.has(item))
+                continue;
+            if (!(item instanceof QuickSettingsItem) || item instanceof QuickSlider)
+                continue;
+
+            let colSpan = 1;
+            try {
+                const meta = grid.layout_manager.get_child_meta(grid, item);
+                colSpan = Math.min(Math.max(meta.columnSpan, 1),
+                    N_QUICK_SETTINGS_COLUMNS);
+            } catch {
+                // keep default
+            }
+
+            const mirror = new QSItemMirror(item);
+            if (sibling)
+                this.menu.insertItemBefore(mirror, sibling, colSpan);
+            else
+                this.menu.addItem(mirror, colSpan);
+            this._trackMirror(mirror);
+        }
+    }
+
+    // Mirrors can destroy themselves when their source goes away (extension
+    // disabled); drop them from the list so a later sync does not destroy
+    // them a second time.
+    _trackMirror(mirror) {
+        this._externalMirrors.push(mirror);
+        mirror.connect('destroy', () => {
+            const index = this._externalMirrors.indexOf(mirror);
+            if (index >= 0)
+                this._externalMirrors.splice(index, 1);
+        });
     }
 });

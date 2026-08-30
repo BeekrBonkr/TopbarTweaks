@@ -1,6 +1,6 @@
 UUID = topbar-tweaks@beekrbonkr.github.io
 INSTALL_DIR = $(HOME)/.local/share/gnome-shell/extensions/$(UUID)
-SRC = extension.js panel.js quickSettingsButton.js prefs.js metadata.json stylesheet.css
+SRC = extension.js panel.js quickSettingsButton.js mirrors.js prefs.js metadata.json stylesheet.css
 
 .PHONY: all install uninstall pack clean test
 
@@ -22,6 +22,7 @@ pack: all
 	gnome-extensions pack --force \
 		--extra-source=panel.js \
 		--extra-source=quickSettingsButton.js \
+		--extra-source=mirrors.js \
 		.
 
 clean:
