@@ -1,0 +1,21 @@
+/* Topbar Tweaks — styling for the secondary panels.
+ * The panel itself reuses the shell theme's #panel styling via its name;
+ * only extension-specific widgets are styled here. */
+
+.topbar-tweaks-dots {
+  spacing: 5px;
+  padding: 0 4px;
+}
+
+.topbar-tweaks-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 3px;
+  background-color: rgba(255, 255, 255, 0.5);
+  transition-duration: 200ms;
+}
+
+.topbar-tweaks-dot.active {
+  width: 18px;
+  background-color: rgba(255, 255, 255, 1);
+}
