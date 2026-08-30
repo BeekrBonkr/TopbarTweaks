@@ -5,10 +5,12 @@
 // the extension settings and anchors all menus to its own monitor.
 
 import Clutter from 'gi://Clutter';
+import Gio from 'gi://Gio';
 import GObject from 'gi://GObject';
 import St from 'gi://St';
 
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
+import {ExtensionState} from 'resource:///org/gnome/shell/misc/extensionUtils.js';
 import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 import * as CtrlAltTab from 'resource:///org/gnome/shell/ui/ctrlAltTab.js';
@@ -18,6 +20,41 @@ import {InputSourceIndicator} from 'resource:///org/gnome/shell/ui/status/keyboa
 
 import {QuickSettingsButton} from './quickSettingsButton.js';
 import {StatusAreaMirrors} from './mirrors.js';
+
+// Blur my Shell blurs our panels through its multi-monitor-bar hook (it
+// scans for uiGroup children named "panelBox"), but with its dynamic
+// override disabled it only applies its transparency style class to panels
+// that existed when it was enabled. Apply the configured class ourselves so
+// late-created panels are transparent too; once Blur my Shell tracks the
+// panel it adds/removes the class as usual.
+export const BLUR_MY_SHELL_UUID = 'blur-my-shell@aunetx';
+const BMS_PANEL_STYLES = [
+    'transparent-panel', 'light-panel', 'dark-panel', 'contrasted-panel',
+];
+
+function blurMyShellPanelStyle() {
+    try {
+        const extension = Main.extensionManager.lookup(BLUR_MY_SHELL_UUID);
+        if (extension?.state !== ExtensionState.ACTIVE || !extension.dir)
+            return null;
+
+        const source = Gio.SettingsSchemaSource.new_from_directory(
+            extension.dir.get_child('schemas').get_path(),
+            Gio.SettingsSchemaSource.get_default(), false);
+        const schema = source.lookup(
+            'org.gnome.shell.extensions.blur-my-shell.panel', true);
+        if (!schema)
+            return null;
+
+        const settings = new Gio.Settings({settings_schema: schema});
+        if (!settings.get_boolean('blur') ||
+            !settings.get_boolean('override-background'))
+            return null;
+        return BMS_PANEL_STYLES[settings.get_int('style-panel')] ?? null;
+    } catch {
+        return null;
+    }
+}
 
 const WorkspaceDots = GObject.registerClass(
 class TopbarTweaksWorkspaceDots extends St.BoxLayout {
@@ -250,6 +287,12 @@ class TopbarTweaksPanel extends St.Widget {
         }
 
         this.style = style || null;
+
+        for (const styleClass of BMS_PANEL_STYLES)
+            this.remove_style_class_name(styleClass);
+        const bmsStyle = blurMyShellPanelStyle();
+        if (bmsStyle)
+            this.add_style_class_name(bmsStyle);
 
         // If the overview is open right now, honor hide-in-overview changes
         if (Main.overview.visible)

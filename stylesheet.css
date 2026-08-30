@@ -21,10 +21,13 @@
 }
 
 /* Mirrored indicators from other extensions. The clone already carries the
- * source button's own padding, so the wrapper adds none. */
+ * source button's own padding and transparent border, so the wrapper adds
+ * none: with the theme's 3px .panel-button border the wrapper would be 6px
+ * taller than the bar and squash the clone vertically. */
 .topbar-tweaks-mirror {
   -natural-hpadding: 0px;
   -minimum-hpadding: 0px;
+  border-width: 0px;
 }
 
 /* Mirrored Quick Settings toggles: keep the pill shape of the cloned
