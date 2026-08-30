@@ -17,6 +17,7 @@ import {ATIndicator} from 'resource:///org/gnome/shell/ui/status/accessibility.j
 import {InputSourceIndicator} from 'resource:///org/gnome/shell/ui/status/keyboard.js';
 
 import {QuickSettingsButton} from './quickSettingsButton.js';
+import {StatusAreaMirrors} from './mirrors.js';
 
 const WorkspaceDots = GObject.registerClass(
 class TopbarTweaksWorkspaceDots extends St.BoxLayout {
@@ -147,6 +148,8 @@ class TopbarTweaksPanel extends St.Widget {
             {sortGroup: CtrlAltTab.SortGroup.TOP});
 
         this.connect('destroy', () => {
+            this._statusMirrors?.destroy();
+            this._statusMirrors = null;
             Main.ctrlAltTabManager.removeGroup(this);
         });
     }
@@ -180,9 +183,14 @@ class TopbarTweaksPanel extends St.Widget {
 
         if (show('show-quick-settings')) {
             this._addIndicator('quickSettings',
-                new QuickSettingsButton(),
+                new QuickSettingsButton(show('mirror-quick-settings')),
                 this._rightBox);
         }
+
+        // Added last so the mirror containers slot in around the built-in
+        // items (left/center: appended; right: before the built-ins).
+        if (show('mirror-indicators'))
+            this._statusMirrors = new StatusAreaMirrors(this);
     }
 
     _addIndicator(role, indicator, box) {

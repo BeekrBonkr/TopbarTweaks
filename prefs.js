@@ -120,6 +120,11 @@ export default class TopbarTweaksPreferences extends ExtensionPreferences {
             ['show-quick-settings', 'Quick Settings', 'Volume, brightness, network and other system controls'],
             ['show-a11y', 'Accessibility menu', ''],
             ['show-keyboard', 'Keyboard layout indicator', ''],
+            ['mirror-indicators', 'Icons from other extensions',
+                'Mirror app tray icons and other indicators from the main top bar; ' +
+                'their menus open on the bar you click'],
+            ['mirror-quick-settings', 'Quick Settings toggles from other extensions',
+                'Mirror toggles that other extensions add to the main Quick Settings menu'],
         ];
         for (const [key, title, subtitle] of switches) {
             const row = new Adw.SwitchRow({title, subtitle});

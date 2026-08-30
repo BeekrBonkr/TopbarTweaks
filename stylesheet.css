@@ -19,3 +19,17 @@
   width: 18px;
   background-color: rgba(255, 255, 255, 1);
 }
+
+/* Mirrored indicators from other extensions. The clone already carries the
+ * source button's own padding, so the wrapper adds none. */
+.topbar-tweaks-mirror {
+  -natural-hpadding: 0px;
+  -minimum-hpadding: 0px;
+}
+
+/* Mirrored Quick Settings toggles: keep the pill shape of the cloned
+ * toggle; hover/press feedback is done via opacity in code because the
+ * clone paints over the button's own background. */
+.topbar-tweaks-qs-mirror {
+  border-radius: 99px;
+}
