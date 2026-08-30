@@ -258,6 +258,13 @@ class TopbarTweaksQuickSettingsButton extends PanelMenu.Button {
                 source: child,
                 y_align: Clutter.ActorAlign.CENTER,
             });
+            // Fix the clone to the source's allocated size; otherwise it
+            // requests the source's preferred size and the mismatch squashes
+            // the painted content (e.g. battery meter icons).
+            child.bind_property('width', clone, 'width',
+                GObject.BindingFlags.SYNC_CREATE);
+            child.bind_property('height', clone, 'height',
+                GObject.BindingFlags.SYNC_CREATE);
             child.bind_property('visible', clone, 'visible',
                 GObject.BindingFlags.SYNC_CREATE);
             child.connectObject('destroy', () => clone.destroy(), clone);

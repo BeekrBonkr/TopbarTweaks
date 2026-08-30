@@ -6,7 +6,7 @@ import St from 'gi://St';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 
-import {SecondaryPanel} from './panel.js';
+import {SecondaryPanel, BLUR_MY_SHELL_UUID} from './panel.js';
 
 // Settings keys that only affect styling; everything else rebuilds the panels.
 const STYLE_KEYS = new Set([
@@ -25,7 +25,11 @@ class SecondaryPanelBox {
         this._monitor = monitor;
         this._atBottom = settings.get_string('panel-position') === 'bottom';
 
-        this.box = new St.BoxLayout({name: 'topbarTweaksPanelBox'});
+        // Named like the primary monitor's panelBox: blur-my-shell blurs the
+        // panel inside any uiGroup child named "panelBox" (its compatibility
+        // hook for multi-monitor bar extensions), so this name gets our bars
+        // the same blur/transparency treatment as the main one.
+        this.box = new St.BoxLayout({name: 'panelBox'});
 
         Main.layoutManager.addChrome(this.box, {
             affectsStruts: true,
@@ -72,6 +76,15 @@ export default class TopbarTweaksExtension extends Extension {
 
         Main.layoutManager.connectObject('monitors-changed',
             () => this._queueRebuild(), this);
+        // Restyle when Blur my Shell is toggled, so our panels pick up (or
+        // drop) its panel transparency class.
+        Main.extensionManager.connectObject('extension-state-changed',
+            (_m, extension) => {
+                if (extension.uuid === BLUR_MY_SHELL_UUID) {
+                    for (const panelBox of this._panelBoxes)
+                        panelBox.panel.updateStyle();
+                }
+            }, this);
         this._settings.connectObject('changed',
             (_s, key) => this._onSettingsChanged(key), this);
 
@@ -82,6 +95,7 @@ export default class TopbarTweaksExtension extends Extension {
 
     disable() {
         Main.layoutManager.disconnectObject(this);
+        Main.extensionManager.disconnectObject(this);
         this._settings.disconnectObject(this);
 
         if (this._rebuildId) {
