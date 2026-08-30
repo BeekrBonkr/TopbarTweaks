@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schemalist>
+  <schema id="org.gnome.shell.extensions.topbar-tweaks"
+          path="/org/gnome/shell/extensions/topbar-tweaks/">
+
+    <!-- Monitor selection -->
+    <key name="monitor-mode" type="s">
+      <choices>
+        <choice value="all"/>
+        <choice value="custom"/>
+      </choices>
+      <default>'all'</default>
+      <summary>Which monitors get an extra top bar</summary>
+      <description>"all" adds a bar to every monitor except the primary one (which already has the system top bar). "custom" only adds bars to the monitors listed in enabled-monitors.</description>
+    </key>
+    <key name="enabled-monitors" type="as">
+      <default>[]</default>
+      <summary>Monitor connectors to add a bar to</summary>
+      <description>List of monitor connector names (e.g. "DP-1", "HDMI-1") that get an extra bar when monitor-mode is "custom".</description>
+    </key>
+
+    <!-- Panel items -->
+    <key name="show-activities" type="b">
+      <default>true</default>
+      <summary>Show the Activities / workspaces button</summary>
+    </key>
+    <key name="show-workspace-dots" type="b">
+      <default>true</default>
+      <summary>Show workspace dots in the Activities button</summary>
+      <description>When disabled, the Activities button shows a text label instead of workspace indicator dots.</description>
+    </key>
+    <key name="show-date-menu" type="b">
+      <default>true</default>
+      <summary>Show the clock / calendar / notifications menu</summary>
+    </key>
+    <key name="show-quick-settings" type="b">
+      <default>true</default>
+      <summary>Show the Quick Settings menu</summary>
+    </key>
+    <key name="show-a11y" type="b">
+      <default>false</default>
+      <summary>Show the accessibility menu</summary>
+    </key>
+    <key name="show-keyboard" type="b">
+      <default>false</default>
+      <summary>Show the keyboard layout indicator</summary>
+    </key>
+    <key name="clock-position" type="s">
+      <choices>
+        <choice value="left"/>
+        <choice value="center"/>
+        <choice value="right"/>
+      </choices>
+      <default>'center'</default>
+      <summary>Position of the clock in the bar</summary>
+    </key>
+
+    <!-- Appearance -->
+    <key name="panel-position" type="s">
+      <choices>
+        <choice value="top"/>
+        <choice value="bottom"/>
+      </choices>
+      <default>'top'</default>
+      <summary>Screen edge for the extra bars</summary>
+    </key>
+    <key name="panel-height" type="i">
+      <range min="0" max="128"/>
+      <default>0</default>
+      <summary>Bar height in pixels (0 = theme default)</summary>
+    </key>
+    <key name="custom-background" type="b">
+      <default>false</default>
+      <summary>Use a custom background color</summary>
+    </key>
+    <key name="background-color" type="s">
+      <default>'#000000'</default>
+      <summary>Custom background color (hex)</summary>
+    </key>
+    <key name="background-opacity" type="d">
+      <range min="0.0" max="1.0"/>
+      <default>1.0</default>
+      <summary>Background opacity of the extra bars</summary>
+      <description>1.0 keeps the background fully opaque; lower values make the bar translucent.</description>
+    </key>
+
+    <!-- Behavior -->
+    <key name="hide-in-overview" type="b">
+      <default>false</default>
+      <summary>Hide the extra bars while the overview is open</summary>
+    </key>
+    <key name="hide-on-fullscreen" type="b">
+      <default>true</default>
+      <summary>Hide a bar when a window is fullscreen on its monitor</summary>
+    </key>
+  </schema>
+</schemalist>

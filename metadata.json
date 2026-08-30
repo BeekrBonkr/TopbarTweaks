@@ -1,0 +1,9 @@
+{
+    "uuid": "topbar-tweaks@beekrbonkr.github.io",
+    "name": "Topbar Tweaks",
+    "description": "Show the top bar on more than one monitor. Adds a fully interactive top bar (Activities, clock/calendar, quick settings and more) to secondary monitors, with extensive configuration: per-monitor selection, panel items, position, size, colors and behavior.",
+    "shell-version": ["48", "49", "50"],
+    "url": "https://github.com/BeekrBonkr/TopbarTweaks",
+    "settings-schema": "org.gnome.shell.extensions.topbar-tweaks",
+    "gettext-domain": "topbar-tweaks@beekrbonkr.github.io"
+}
