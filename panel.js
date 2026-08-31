@@ -249,6 +249,16 @@ class TopbarTweaksPanel extends St.Widget {
         this.menuManager.addMenu(indicator.menu);
     }
 
+    // Whether any menu belonging to this bar is currently open (native
+    // indicator menus, and real menus re-anchored here by a mirror). Used to
+    // keep a pressure-revealed bar on screen while it is being interacted
+    // with.
+    hasOpenMenu() {
+        if (this.menuManager.activeMenu)
+            return true;
+        return this._statusMirrors?.hasOpenMenu() ?? false;
+    }
+
     _onOverviewShowing() {
         this.add_style_pseudo_class('overview');
         if (this._settings.get_boolean('hide-in-overview')) {

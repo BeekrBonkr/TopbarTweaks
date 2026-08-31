@@ -78,6 +78,46 @@ class TopbarTweaksQSItemMirror extends St.Button {
     }
 });
 
+// A functional stand-in for a slider another extension added to the MAIN
+// Quick Settings menu. A clone cannot forward drags, so this is a real
+// QuickSlider whose value is kept in two-way sync with the original: dragging
+// here updates the real slider (which the owning extension listens to), and
+// external changes flow back.
+const QSSliderMirror = GObject.registerClass(
+class TopbarTweaksQSSliderMirror extends QuickSlider {
+    _init(source) {
+        super._init();
+
+        this._source = source;
+        this._syncing = false;
+
+        for (const prop of ['icon-name', 'gicon', 'icon-reactive',
+            'icon-label', 'visible', 'reactive', 'accessible-name']) {
+            source.bind_property(prop, this, prop,
+                GObject.BindingFlags.SYNC_CREATE);
+        }
+
+        source.slider.connectObject('notify::value', () => {
+            if (this._syncing)
+                return;
+            this._syncing = true;
+            this.slider.value = source.slider.value;
+            this._syncing = false;
+        }, this);
+        this.slider.connect('notify::value', () => {
+            if (this._syncing)
+                return;
+            this._syncing = true;
+            source.slider.value = this.slider.value;
+            this._syncing = false;
+        });
+        this.slider.value = source.slider.value;
+
+        this.connect('icon-clicked', () => source.emit('icon-clicked'));
+        source.connectObject('destroy', () => this.destroy(), this);
+    }
+});
+
 export const QuickSettingsButton = GObject.registerClass(
 class TopbarTweaksQuickSettingsButton extends PanelMenu.Button {
     constructor(mirrorExternal) {
@@ -273,15 +313,15 @@ class TopbarTweaksQuickSettingsButton extends PanelMenu.Button {
             this._trackMirror(clone);
         }
 
-        // Toggles in the grid. Sliders and other custom widgets need real
-        // pointer interaction that a clone cannot forward, so only
-        // button-like items are mirrored.
+        // Items in the grid. Button-like toggles are mirrored with a clickable
+        // clone; sliders get a real two-way-synced slider (clones cannot
+        // forward drags). Anything else is skipped.
         const grid = main.menu._grid;
         const sibling = this._backgroundApps?.quickSettingsItems?.at(-1) ?? null;
         for (const item of grid.get_children()) {
             if (builtinItems.has(item))
                 continue;
-            if (!(item instanceof QuickSettingsItem) || item instanceof QuickSlider)
+            if (!(item instanceof QuickSettingsItem))
                 continue;
 
             let colSpan = 1;
@@ -293,7 +333,9 @@ class TopbarTweaksQuickSettingsButton extends PanelMenu.Button {
                 // keep default
             }
 
-            const mirror = new QSItemMirror(item);
+            const mirror = item instanceof QuickSlider
+                ? new QSSliderMirror(item)
+                : new QSItemMirror(item);
             if (sibling)
                 this.menu.insertItemBefore(mirror, sibling, colSpan);
             else

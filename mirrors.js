@@ -108,7 +108,7 @@ const IndicatorMirror = GObject.registerClass(
 class TopbarTweaksIndicatorMirror extends St.Button {
     _init(container, source) {
         super._init({
-            style_class: 'panel-button topbar-tweaks-mirror',
+            style_class: 'topbar-tweaks-mirror',
             reactive: true,
             can_focus: true,
             track_hover: true,
@@ -116,6 +116,7 @@ class TopbarTweaksIndicatorMirror extends St.Button {
         });
 
         this._source = source;
+        this._watchedMenu = null;
 
         // Fix the clone to the source's real size so a different bar height
         // never distorts the icon; the St.Bin centers it vertically.
@@ -124,10 +125,46 @@ class TopbarTweaksIndicatorMirror extends St.Button {
             GObject.BindingFlags.SYNC_CREATE);
         source.bind_property('height', clone, 'height',
             GObject.BindingFlags.SYNC_CREATE);
+
+        // The wrapper cannot carry the theme's .panel-button styling itself:
+        // its 3px border would shrink the content box and squash the clone.
+        // Instead a pill widget with that style class sits *behind* the
+        // clone at the clone's exact size — the border is transparent and
+        // the hover/active box-shadow is drawn inside it, so it renders
+        // exactly like a real panel button's highlight.
+        this._pill = new St.Widget({
+            style_class: 'panel-button topbar-tweaks-mirror-pill',
+        });
+        source.bind_property('width', this._pill, 'width',
+            GObject.BindingFlags.SYNC_CREATE);
+        source.bind_property('height', this._pill, 'height',
+            GObject.BindingFlags.SYNC_CREATE);
+        const stack = new Clutter.Actor({
+            layout_manager: new Clutter.BinLayout(),
+        });
+        stack.add_child(this._pill);
+        stack.add_child(clone);
         this.set_child(new St.Bin({
             y_align: Clutter.ActorAlign.CENTER,
-            child: clone,
+            child: stack,
         }));
+
+        const syncPill = () => {
+            if (this.hover)
+                this._pill.add_style_pseudo_class('hover');
+            else
+                this._pill.remove_style_pseudo_class('hover');
+            if (this.pressed)
+                this._pill.add_style_pseudo_class('active');
+            else if (!this._watchedMenu)
+                this._pill.remove_style_pseudo_class('active');
+        };
+        this.connect('notify::hover', syncPill);
+        this.connect('notify::pressed', syncPill);
+        this.connect('key-focus-in',
+            () => this._pill.add_style_pseudo_class('focus'));
+        this.connect('key-focus-out',
+            () => this._pill.remove_style_pseudo_class('focus'));
 
         // Extensions hide either their button or its container; a clone
         // would paint the source even while it is hidden, so track both.
@@ -169,8 +206,10 @@ class TopbarTweaksIndicatorMirror extends St.Button {
         if (handlesOwnClicks(this._source) || !menu) {
             // Let the indicator run its own logic; if that logic opens the
             // menu (possibly async), it opens here thanks to the anchor.
-            if (menu)
+            if (menu) {
                 anchorMenuTo(menu, this);
+                this._watchMenu(menu);
+            }
             this._source.event(event, false);
             return Clutter.EVENT_STOP;
         }
@@ -187,11 +226,33 @@ class TopbarTweaksIndicatorMirror extends St.Button {
             menu.close();
         } else {
             anchorMenuTo(menu, this);
+            this._watchMenu(menu);
             menu.open();
         }
     }
 
+    // Show the panel-button 'active' highlight while a menu opened from this
+    // mirror is up, matching how the real button behaves on the main bar.
+    _watchMenu(menu) {
+        if (this._watchedMenu)
+            return;
+        this._watchedMenu = menu;
+        menu.connectObject('open-state-changed', (m, open) => {
+            if (open && m.sourceActor === this) {
+                this._pill.add_style_pseudo_class('active');
+                return;
+            }
+            this._pill.remove_style_pseudo_class('active');
+            m.disconnectObject(this);
+            this._watchedMenu = null;
+        }, this);
+    }
+
     _onDestroy() {
+        if (this._watchedMenu) {
+            this._watchedMenu.disconnectObject(this);
+            this._watchedMenu = null;
+        }
         const menu = this._menu();
         if (menu?._topbarTweaksAnchor &&
             menu.sourceActor === this) {
@@ -267,6 +328,20 @@ export class StatusAreaMirrors {
                 mirrorBox.add_child(new IndicatorMirror(child, source));
             }
         }
+    }
+
+    // Whether any real menu is currently open re-anchored to one of our
+    // mirrors (i.e. the user opened it from this bar)
+    hasOpenMenu() {
+        for (const mirrorBox of this._boxes.values()) {
+            for (const mirror of mirrorBox.get_children()) {
+                const menu = mirror._source?.menu;
+                if (menu instanceof PopupMenu.PopupMenu &&
+                    menu.isOpen && menu.sourceActor === mirror)
+                    return true;
+            }
+        }
+        return false;
     }
 
     destroy() {

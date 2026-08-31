@@ -7,6 +7,7 @@ import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 
 import {SecondaryPanel, BLUR_MY_SHELL_UUID} from './panel.js';
+import {BarVisibilityManager} from './visibility.js';
 
 // Settings keys that only affect styling; everything else rebuilds the panels.
 const STYLE_KEYS = new Set([
@@ -15,6 +16,20 @@ const STYLE_KEYS = new Set([
     'background-color',
     'background-opacity',
     'hide-in-overview',
+]);
+
+// Keys handled live by the visibility manager (no rebuild needed)
+const VISIBILITY_KEYS = new Set([
+    'hide-on-fullscreen',
+    'animate-fullscreen-bars',
+    'animation-duration-hide',
+    'animation-duration-show',
+    'animation-interpolation',
+    'pressure-reveal',
+    'pressure-reveal-bars',
+    'pressure-threshold',
+    'pressure-timeout',
+    'reveal-hide-delay',
 ]);
 
 // One chrome box + panel per secondary monitor, equivalent to
@@ -31,9 +46,11 @@ class SecondaryPanelBox {
         // the same blur/transparency treatment as the main one.
         this.box = new St.BoxLayout({name: 'panelBox'});
 
+        // Fullscreen tracking is deliberately NOT delegated to the layout
+        // manager: the BarVisibilityManager replicates its policy with a
+        // slide animation (and optional pressure reveal) instead.
         Main.layoutManager.addChrome(this.box, {
             affectsStruts: true,
-            trackFullscreen: settings.get_boolean('hide-on-fullscreen'),
         });
 
         this.panel = new SecondaryPanel(settings, monitor);
@@ -46,6 +63,14 @@ class SecondaryPanelBox {
             this._heightId = this.box.connect('notify::height',
                 () => this._updatePosition());
         }
+    }
+
+    get monitor() {
+        return this._monitor;
+    }
+
+    get atBottom() {
+        return this._atBottom;
     }
 
     _updatePosition() {
@@ -73,6 +98,7 @@ export default class TopbarTweaksExtension extends Extension {
         this._settings = this.getSettings();
         this._panelBoxes = [];
         this._rebuildId = 0;
+        this._visibility = new BarVisibilityManager(this._settings);
 
         Main.layoutManager.connectObject('monitors-changed',
             () => this._queueRebuild(), this);
@@ -103,6 +129,11 @@ export default class TopbarTweaksExtension extends Extension {
             this._rebuildId = 0;
         }
 
+        // Tear down visibility management first: it resets the bars (and the
+        // primary panelBox) to their natural translation and hands
+        // fullscreen tracking back to the shell.
+        this._visibility.destroy();
+        this._visibility = null;
         this._destroyPanels();
         this._settings = null;
     }
@@ -111,6 +142,8 @@ export default class TopbarTweaksExtension extends Extension {
         if (STYLE_KEYS.has(key)) {
             for (const panelBox of this._panelBoxes)
                 panelBox.panel.updateStyle();
+        } else if (VISIBILITY_KEYS.has(key)) {
+            this._visibility.updateSettings();
         } else {
             this._queueRebuild();
         }
@@ -129,6 +162,7 @@ export default class TopbarTweaksExtension extends Extension {
     }
 
     _destroyPanels() {
+        this._visibility?.setSecondaryBars([]);
         for (const panelBox of this._panelBoxes)
             panelBox.destroy();
         this._panelBoxes = [];
@@ -146,6 +180,13 @@ export default class TopbarTweaksExtension extends Extension {
             this._panelBoxes.push(
                 new SecondaryPanelBox(this._settings, monitor));
         }
+
+        this._visibility.setSecondaryBars(this._panelBoxes.map(panelBox => ({
+            actor: panelBox.box,
+            getMonitor: () => panelBox.monitor,
+            isBottom: () => panelBox.atBottom,
+            hasOpenMenu: () => panelBox.panel?.hasOpenMenu() ?? false,
+        })));
     }
 
     _monitorEnabled(monitor) {

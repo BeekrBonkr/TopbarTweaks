@@ -32,6 +32,7 @@ export default class TopbarTweaksPreferences extends ExtensionPreferences {
         window.add(this._buildMonitorsPage(settings));
         window.add(this._buildItemsPage(settings));
         window.add(this._buildAppearancePage(settings));
+        window.add(this._buildAnimationPage(settings));
     }
 
     _buildMonitorsPage(settings) {
@@ -219,12 +220,145 @@ export default class TopbarTweaksPreferences extends ExtensionPreferences {
         settings.bind('hide-in-overview', overviewRow, 'active', Gio.SettingsBindFlags.DEFAULT);
         behaviorGroup.add(overviewRow);
 
-        const fullscreenRow = new Adw.SwitchRow({
-            title: 'Hide on fullscreen',
-            subtitle: 'Hide a bar while a window is fullscreen on its monitor',
+        return page;
+    }
+
+    _buildAnimationPage(settings) {
+        const page = new Adw.PreferencesPage({
+            title: 'Animation',
+            icon_name: 'media-playback-start-symbolic',
         });
-        settings.bind('hide-on-fullscreen', fullscreenRow, 'active', Gio.SettingsBindFlags.DEFAULT);
-        behaviorGroup.add(fullscreenRow);
+
+        const spinRow = (key, title, subtitle, lower, upper, step) => {
+            const row = new Adw.SpinRow({
+                title, subtitle,
+                adjustment: new Gtk.Adjustment({
+                    lower, upper, step_increment: step, page_increment: step * 4,
+                }),
+            });
+            settings.bind(key, row, 'value', Gio.SettingsBindFlags.DEFAULT);
+            return row;
+        };
+
+        // --- Fullscreen hiding + slide animation ---
+
+        const slideGroup = new Adw.PreferencesGroup({
+            title: 'Fullscreen Slide',
+            description: 'How top bars leave and re-enter the screen when a ' +
+                'window goes fullscreen.',
+        });
+        page.add(slideGroup);
+
+        const fullscreenRow = new Adw.SwitchRow({
+            title: 'Hide extra bars on fullscreen',
+            subtitle: 'Hide a secondary bar while a window is fullscreen on ' +
+                'its monitor (the main top bar always hides)',
+        });
+        settings.bind('hide-on-fullscreen', fullscreenRow, 'active',
+            Gio.SettingsBindFlags.DEFAULT);
+        slideGroup.add(fullscreenRow);
+
+        const animBarsRow = new Adw.ComboRow({
+            title: 'Animated bars',
+            subtitle: 'Bars not selected here appear and disappear instantly, ' +
+                'like stock GNOME',
+            model: Gtk.StringList.new([
+                'All bars', 'Main bar only', 'Secondary bars only',
+                'None (instant)',
+            ]),
+        });
+        bindCombo(settings, 'animate-fullscreen-bars', animBarsRow,
+            ['all', 'main', 'secondary', 'none']);
+        slideGroup.add(animBarsRow);
+
+        slideGroup.add(spinRow('animation-duration-hide', 'Slide-out duration',
+            'Milliseconds for a bar to leave the screen', 0, 2000, 25));
+        slideGroup.add(spinRow('animation-duration-show', 'Slide-in duration',
+            'Milliseconds for a bar to return', 0, 2000, 25));
+
+        const easingRow = new Adw.ComboRow({
+            title: 'Interpolation',
+            subtitle: 'Easing curve of the slide',
+            model: Gtk.StringList.new([
+                'Linear',
+                'Ease in (quad)',
+                'Ease out (quad)',
+                'Ease in-out (quad)',
+                'Ease out (cubic)',
+                'Ease in-out (cubic)',
+                'Ease out (quart)',
+                'Ease out (quint)',
+                'Ease out (expo)',
+                'Ease in-out (sine)',
+                'Ease out (circ)',
+                'Overshoot (back)',
+                'Elastic',
+                'Bounce',
+            ]),
+        });
+        bindCombo(settings, 'animation-interpolation', easingRow, [
+            'linear',
+            'ease-in-quad',
+            'ease-out-quad',
+            'ease-in-out-quad',
+            'ease-out-cubic',
+            'ease-in-out-cubic',
+            'ease-out-quart',
+            'ease-out-quint',
+            'ease-out-expo',
+            'ease-in-out-sine',
+            'ease-out-circ',
+            'ease-out-back',
+            'ease-out-elastic',
+            'ease-out-bounce',
+        ]);
+        slideGroup.add(easingRow);
+
+        // --- Pressure reveal ---
+
+        const revealGroup = new Adw.PreferencesGroup({
+            title: 'Pressure Reveal',
+            description: 'Temporarily slide a hidden bar back in by pushing ' +
+                'the mouse against the screen edge it hides behind.',
+        });
+        page.add(revealGroup);
+
+        const revealRow = new Adw.SwitchRow({
+            title: 'Reveal hidden bars with the mouse',
+        });
+        settings.bind('pressure-reveal', revealRow, 'active',
+            Gio.SettingsBindFlags.DEFAULT);
+        revealGroup.add(revealRow);
+
+        const revealBarsRow = new Adw.ComboRow({
+            title: 'Bars that can be revealed',
+            model: Gtk.StringList.new([
+                'All bars', 'Main bar only', 'Secondary bars only',
+            ]),
+        });
+        bindCombo(settings, 'pressure-reveal-bars', revealBarsRow,
+            ['all', 'main', 'secondary']);
+        revealGroup.add(revealBarsRow);
+
+        const thresholdRow = spinRow('pressure-threshold', 'Required pressure',
+            'How hard to push against the edge, in pixels of pointer travel',
+            10, 500, 10);
+        revealGroup.add(thresholdRow);
+
+        const timeoutRow = spinRow('pressure-timeout', 'Pressure window',
+            'Milliseconds in which the pressure must build up; slow drifts ' +
+            'against the edge are ignored', 100, 5000, 100);
+        revealGroup.add(timeoutRow);
+
+        const delayRow = spinRow('reveal-hide-delay', 'Hide delay',
+            'Milliseconds after the mouse leaves a revealed bar before it ' +
+            'slides back out', 0, 5000, 50);
+        revealGroup.add(delayRow);
+
+        for (const row of [revealBarsRow, thresholdRow, timeoutRow, delayRow]) {
+            settings.bind('pressure-reveal', row, 'sensitive',
+                Gio.SettingsBindFlags.GET);
+        }
 
         return page;
     }
