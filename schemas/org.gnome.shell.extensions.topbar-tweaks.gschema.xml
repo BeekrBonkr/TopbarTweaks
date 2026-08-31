@@ -103,5 +103,81 @@
       <default>true</default>
       <summary>Hide a bar when a window is fullscreen on its monitor</summary>
     </key>
+
+    <!-- Fullscreen slide animation -->
+    <key name="animate-fullscreen-bars" type="s">
+      <choices>
+        <choice value="all"/>
+        <choice value="main"/>
+        <choice value="secondary"/>
+        <choice value="none"/>
+      </choices>
+      <default>'all'</default>
+      <summary>Which bars slide in and out on fullscreen changes</summary>
+      <description>Bars not covered by this setting hide instantly, like stock GNOME. "main" is the primary monitor's system top bar; "secondary" the bars this extension adds.</description>
+    </key>
+    <key name="animation-duration-hide" type="i">
+      <range min="0" max="2000"/>
+      <default>300</default>
+      <summary>Slide-out duration in milliseconds</summary>
+    </key>
+    <key name="animation-duration-show" type="i">
+      <range min="0" max="2000"/>
+      <default>250</default>
+      <summary>Slide-in duration in milliseconds</summary>
+    </key>
+    <key name="animation-interpolation" type="s">
+      <choices>
+        <choice value="linear"/>
+        <choice value="ease-in-quad"/>
+        <choice value="ease-out-quad"/>
+        <choice value="ease-in-out-quad"/>
+        <choice value="ease-out-cubic"/>
+        <choice value="ease-in-out-cubic"/>
+        <choice value="ease-out-quart"/>
+        <choice value="ease-out-quint"/>
+        <choice value="ease-out-expo"/>
+        <choice value="ease-in-out-sine"/>
+        <choice value="ease-out-circ"/>
+        <choice value="ease-out-back"/>
+        <choice value="ease-out-elastic"/>
+        <choice value="ease-out-bounce"/>
+      </choices>
+      <default>'ease-out-quad'</default>
+      <summary>Easing curve for the slide animation</summary>
+    </key>
+
+    <!-- Pressure reveal -->
+    <key name="pressure-reveal" type="b">
+      <default>true</default>
+      <summary>Reveal a hidden bar by pushing the pointer against its screen edge</summary>
+    </key>
+    <key name="pressure-reveal-bars" type="s">
+      <choices>
+        <choice value="all"/>
+        <choice value="main"/>
+        <choice value="secondary"/>
+      </choices>
+      <default>'all'</default>
+      <summary>Which bars can be revealed by pointer pressure</summary>
+    </key>
+    <key name="pressure-threshold" type="i">
+      <range min="10" max="500"/>
+      <default>100</default>
+      <summary>Pointer pressure (in pixels) needed to reveal a bar</summary>
+      <description>How far the pointer must be pushed against the screen edge before the bar slides in. Higher values require a firmer shove.</description>
+    </key>
+    <key name="pressure-timeout" type="i">
+      <range min="100" max="5000"/>
+      <default>1000</default>
+      <summary>Time window in milliseconds for accumulating edge pressure</summary>
+      <description>Pressure older than this is forgotten; slow drifts against the edge won't trigger the reveal.</description>
+    </key>
+    <key name="reveal-hide-delay" type="i">
+      <range min="0" max="5000"/>
+      <default>750</default>
+      <summary>Milliseconds before a revealed bar hides again</summary>
+      <description>Counted from when the pointer leaves the bar (a bar with an open menu stays visible).</description>
+    </key>
   </schema>
 </schemalist>
