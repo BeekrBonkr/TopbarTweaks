@@ -19,6 +19,34 @@ function bindCombo(settings, key, comboRow, values) {
     });
 }
 
+// [title, subtitle, url] shown on the About page.
+const LINKS = [
+    ['Topbar Tweaks on GitHub', 'Source code, issues and releases',
+        'https://github.com/BeekrBonkr/TopbarTweaks'],
+    ['Report an issue', 'Bugs, feature requests and questions',
+        'https://github.com/BeekrBonkr/TopbarTweaks/issues'],
+    ['Always On Indicate', 'My other extension: see and manage always-on-top and sticky windows',
+        'https://github.com/BeekrBonkr/AlwaysOnIndicate'],
+    ['BeekrBonkr on GitHub', 'More of my projects', 'https://github.com/BeekrBonkr'],
+];
+
+// A row that opens a web page in the default browser when activated.
+function linkRow(window, title, subtitle, uri, icon = 'adw-external-link-symbolic') {
+    const row = new Adw.ActionRow({title, subtitle: subtitle ?? '', activatable: true});
+    row.add_suffix(new Gtk.Image({icon_name: icon, valign: Gtk.Align.CENTER}));
+    row.connect('activated', () => {
+        new Gtk.UriLauncher({uri}).launch(window.get_root?.() ?? window, null, (launcher, result) => {
+            try {
+                launcher.launch_finish(result);
+            } catch (e) {
+                if (!e.matches?.(Gio.IOErrorEnum, Gio.IOErrorEnum.CANCELLED))
+                    console.warn(`Could not open ${uri}: ${e.message}`);
+            }
+        });
+    });
+    return row;
+}
+
 function rgbaToHex(rgba) {
     const to2 = v => Math.round(v * 255).toString(16).padStart(2, '0');
     return `#${to2(rgba.red)}${to2(rgba.green)}${to2(rgba.blue)}`;
@@ -33,6 +61,7 @@ export default class TopbarTweaksPreferences extends ExtensionPreferences {
         window.add(this._buildItemsPage(settings));
         window.add(this._buildAppearancePage(settings));
         window.add(this._buildAnimationPage(settings));
+        window.add(this._buildAboutPage(window));
     }
 
     _buildMonitorsPage(settings) {
@@ -359,6 +388,39 @@ export default class TopbarTweaksPreferences extends ExtensionPreferences {
             settings.bind('pressure-reveal', row, 'sensitive',
                 Gio.SettingsBindFlags.GET);
         }
+
+        return page;
+    }
+
+    _buildAboutPage(window) {
+        const page = new Adw.PreferencesPage({
+            title: 'About',
+            icon_name: 'help-about-symbolic',
+        });
+
+        const info = new Adw.PreferencesGroup({
+            title: this.metadata.name,
+            description: this.metadata.description,
+        });
+        page.add(info);
+        const version = this.metadata['version-name'] ?? this.metadata.version ?? 'development';
+        info.add(new Adw.ActionRow({title: 'Version', subtitle: String(version)}));
+        info.add(new Adw.ActionRow({title: 'License', subtitle: 'GPL-3.0-or-later'}));
+
+        const links = new Adw.PreferencesGroup({title: 'Links'});
+        page.add(links);
+        for (const [title, subtitle, uri] of LINKS)
+            links.add(linkRow(window, title, subtitle, uri));
+
+        const support = new Adw.PreferencesGroup({
+            title: 'Support',
+            description: 'This extension is free and open source, built in my spare ' +
+                'time. If it saved you some time or you would like to see it keep ' +
+                'getting updates, you can buy me a coffee.',
+        });
+        page.add(support);
+        support.add(linkRow(window, 'Buy me a coffee on Ko-fi', 'ko-fi.com/bkrbnkr',
+            'https://ko-fi.com/bkrbnkr', 'emblem-favorite-symbolic'));
 
         return page;
     }
