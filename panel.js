@@ -24,12 +24,15 @@ import {QuickSettingsButton} from './quickSettingsButton.js';
 import {StatusAreaMirrors} from './mirrors.js';
 
 // Blur my Shell blurs our panels through its multi-monitor-bar hook (it
-// scans for uiGroup children named "panelBox"), but with its dynamic
-// override disabled it only applies its transparency style class to panels
-// that existed when it was enabled. Apply the configured class ourselves so
-// late-created panels are transparent too; once Blur my Shell tracks the
-// panel it adds/removes the class as usual.
+// scans for uiGroup children named "panelBox" and inserts a background
+// group into the box, behind the panel). Older versions (< 76) with the
+// dynamic override disabled only apply their transparency style class to
+// panels that existed when they were enabled, so we apply the configured
+// class ourselves -- but only while the blur background is actually there:
+// a transparency class without the blur behind it leaves an invisible bar.
+// Once Blur my Shell tracks the panel it adds/removes the class as usual.
 export const BLUR_MY_SHELL_UUID = 'blur-my-shell@aunetx';
+const BMS_BACKGROUND_NAME = 'bms-panel-backgroundgroup';
 const BMS_PANEL_STYLES = [
     'transparent-panel', 'light-panel', 'dark-panel', 'contrasted-panel',
 ];
@@ -52,11 +55,76 @@ function blurMyShellPanelStyle() {
         if (!settings.get_boolean('blur') ||
             !settings.get_boolean('override-background'))
             return null;
+        // In dynamic mode Blur my Shell decides per window proximity and
+        // applies/removes the class itself; never second-guess it.
+        if (settings.get_boolean('override-background-dynamically'))
+            return null;
         return BMS_PANEL_STYLES[settings.get_int('style-panel')] ?? null;
     } catch {
         return null;
     }
 }
+
+// Blur my Shell only looks for extra "panelBox" actors when the display's
+// workareas-changed signal fires. Rebuilding our bars in place leaves the
+// struts unchanged, and mutter drops a strut update that changes nothing,
+// so no such signal follows a rebuild and the new bars would never be
+// blurred. Ask Blur my Shell's panel component to rescan directly instead.
+// Both entry points are idempotent for already-blurred panels.
+export function requestBlurMyShellRescan() {
+    try {
+        const panelBlur = global.blur_my_shell?._panel_blur;
+        if (!panelBlur?.enabled)
+            return;
+        if (typeof panelBlur.discovery?.blur_extra_panel_boxes === 'function')
+            panelBlur.discovery.blur_extra_panel_boxes(); // >= v76
+        else if (typeof panelBlur.blur_existing_panels === 'function')
+            panelBlur.blur_existing_panels(); // v72 - v75
+    } catch (e) {
+        console.warn(`Topbar Tweaks: Blur my Shell rescan failed: ${e}`);
+    }
+}
+
+// The stock DateMenuButton is never destroyed, so it connects to the
+// session mode, the message tray and its calendar event source without ever
+// disconnecting. Ours are destroyed on every rebuild; neutralize those
+// callbacks afterwards and drop the D-Bus event source so its proxy stops
+// signalling a disposed calendar.
+const SecondaryDateMenuButton = GObject.registerClass(
+class TopbarTweaksDateMenuButton extends DateMenuButton {
+    _init() {
+        super._init();
+        this.connect('destroy', () => {
+            this._topbarTweaksDestroyed = true;
+            this._eventSource?.destroy();
+            this._eventSource = null;
+        });
+    }
+
+    _sessionUpdated() {
+        if (this._topbarTweaksDestroyed)
+            return;
+        super._sessionUpdated();
+    }
+
+    _onSourceAdded(tray, source) {
+        if (this._topbarTweaksDestroyed)
+            return;
+        super._onSourceAdded(tray, source);
+    }
+
+    _onSourceRemoved(tray, source) {
+        if (this._topbarTweaksDestroyed)
+            return;
+        super._onSourceRemoved(tray, source);
+    }
+
+    _updateCount() {
+        if (this._topbarTweaksDestroyed)
+            return;
+        super._updateCount();
+    }
+});
 
 // WorkspaceDot and WorkspaceIndicators are ports of the private classes of
 // the same names in gnome-shell's ui/panel.js. The workspaces adjustment
@@ -305,6 +373,23 @@ class TopbarTweaksPanel extends St.Widget {
         global.display.connectObject('workareas-changed',
             () => this.queue_relayout(), this);
 
+        // Track Blur my Shell's background group coming and going in our
+        // panel box (the parent), see _syncBlurMyShellStyle(). The panel
+        // lives and dies with its box, so the handlers need no explicit
+        // disconnection.
+        this.connect('parent-set', () => {
+            if (this._destroyed)
+                return;
+            this.get_parent()?.connectObject(
+                'child-added', () => this._syncBlurMyShellStyle(),
+                'child-removed', (_box, child) => {
+                    if (child !== this)
+                        this._syncBlurMyShellStyle();
+                },
+                this);
+            this._syncBlurMyShellStyle();
+        });
+
         this._populate();
         this.updateStyle();
 
@@ -314,6 +399,7 @@ class TopbarTweaksPanel extends St.Widget {
             {sortGroup: CtrlAltTab.SortGroup.TOP});
 
         this.connect('destroy', () => {
+            this._destroyed = true;
             this._statusMirrors?.destroy();
             this._statusMirrors = null;
             Main.ctrlAltTabManager.removeGroup(this);
@@ -337,7 +423,7 @@ class TopbarTweaksPanel extends St.Widget {
 
         if (show('show-date-menu')) {
             this._addIndicator('dateMenu',
-                new DateMenuButton(),
+                new SecondaryDateMenuButton(),
                 boxes[clockPosition] ?? this._centerBox);
         }
 
@@ -425,19 +511,52 @@ class TopbarTweaksPanel extends St.Widget {
             style += `background-color: rgba(${r}, ${g}, ${b}, ${opacity.toFixed(3)});`;
         }
 
+        // Blur my Shell (>= 76) keeps its corner radius as an inline
+        // declaration on the panel; carry it over so a restyle does not
+        // drop it.
+        const radius = /border-radius:[^;]*;?/.exec(this.get_style() ?? '');
+        if (radius)
+            style += radius[0];
+
         this.style = style || null;
 
-        for (const styleClass of BMS_PANEL_STYLES)
-            this.remove_style_class_name(styleClass);
-        const bmsStyle = blurMyShellPanelStyle();
-        if (bmsStyle)
-            this.add_style_class_name(bmsStyle);
+        this._syncBlurMyShellStyle();
 
         // If the overview is open right now, honor hide-in-overview changes
         if (Main.overview.visible)
             this._onOverviewShowing();
         else
             this._onOverviewHiding();
+    }
+
+    _hasBlurMyShellBackground() {
+        const parent = this.get_parent();
+        if (!parent)
+            return false;
+        return parent.get_children().some(
+            child => child.name === BMS_BACKGROUND_NAME);
+    }
+
+    // Keep Blur my Shell's transparency class consistent with whether its
+    // blur background is actually behind this panel: without the blur the
+    // stock opaque bar is the right fallback, not an invisible one.
+    _syncBlurMyShellStyle() {
+        if (this._destroyed)
+            return;
+        if (!this._hasBlurMyShellBackground()) {
+            for (const styleClass of BMS_PANEL_STYLES)
+                this.remove_style_class_name(styleClass);
+            return;
+        }
+
+        // Blur my Shell already chose a class (it toggles between its
+        // configured style and transparent-panel in the overview); leave it.
+        if (BMS_PANEL_STYLES.some(cls => this.has_style_class_name(cls)))
+            return;
+
+        const bmsStyle = blurMyShellPanelStyle();
+        if (bmsStyle)
+            this.add_style_class_name(bmsStyle);
     }
 
     vfunc_get_preferred_width(_forHeight) {
