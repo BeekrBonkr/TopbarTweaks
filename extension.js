@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+import Clutter from 'gi://Clutter';
 import GLib from 'gi://GLib';
 import St from 'gi://St';
 
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 
-import {SecondaryPanel, BLUR_MY_SHELL_UUID} from './panel.js';
+import {SecondaryPanel, BLUR_MY_SHELL_UUID, requestBlurMyShellRescan} from './panel.js';
 import {BarVisibilityManager} from './visibility.js';
 
 // Settings keys that only affect styling; everything else rebuilds the panels.
@@ -40,11 +41,16 @@ class SecondaryPanelBox {
         this._monitor = monitor;
         this._atBottom = settings.get_string('panel-position') === 'bottom';
 
-        // Named like the primary monitor's panelBox: blur-my-shell blurs the
-        // panel inside any uiGroup child named "panelBox" (its compatibility
-        // hook for multi-monitor bar extensions), so this name gets our bars
-        // the same blur/transparency treatment as the main one.
-        this.box = new St.BoxLayout({name: 'panelBox'});
+        // Named (and laid out) like the primary monitor's panelBox:
+        // blur-my-shell blurs the panel inside any uiGroup child named
+        // "panelBox" (its compatibility hook for multi-monitor bar
+        // extensions) by inserting its blur background as a zero-sized first
+        // child, so this gets our bars the same blur/transparency treatment
+        // as the main one.
+        this.box = new St.BoxLayout({
+            name: 'panelBox',
+            orientation: Clutter.Orientation.VERTICAL,
+        });
 
         // Fullscreen tracking is deliberately NOT delegated to the layout
         // manager: the BarVisibilityManager replicates its policy with a
@@ -187,6 +193,11 @@ export default class TopbarTweaksExtension extends Extension {
             isBottom: () => panelBox.atBottom,
             hasOpenMenu: () => panelBox.panel?.hasOpenMenu() ?? false,
         })));
+
+        // A rebuild usually leaves the work areas untouched, so Blur my
+        // Shell would never notice the new bars on its own.
+        if (this._panelBoxes.length > 0)
+            requestBlurMyShellRescan();
     }
 
     _monitorEnabled(monitor) {
