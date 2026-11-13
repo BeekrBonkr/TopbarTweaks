@@ -30,6 +30,7 @@ clean:
 	rm -f schemas/gschemas.compiled *.shell-extension.zip
 
 # Run a nested gnome-shell with two virtual monitors to test the extension
+# (needs the mutter-devkit package; --nested no longer exists)
 test: install
-	MUTTER_DEBUG_NUM_DUMMY_MONITORS=2 MUTTER_DEBUG_DUMMY_MODE_SPECS=1280x720 \
-		dbus-run-session -- gnome-shell --nested --wayland
+	dbus-run-session -- gnome-shell --devkit --wayland \
+		--virtual-monitor 1280x720 --virtual-monitor 1280x720

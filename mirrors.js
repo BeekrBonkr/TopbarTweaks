@@ -88,6 +88,12 @@ export function restoreAnchor(menu) {
 // prototypes are walked; registerClass() puts vfunc overrides there as own
 // properties.
 function handlesOwnClicks(source) {
+    // GNOME 49+: while the button's stock click gesture is enabled, that
+    // gesture toggles the menu and a forwarded press would do nothing.
+    // Indicators with their own press handling (AppIndicator) disable it.
+    if (source._clickGesture?.get_enabled?.())
+        return false;
+
     for (let proto = Object.getPrototypeOf(source);
         proto;
         proto = Object.getPrototypeOf(proto)) {
